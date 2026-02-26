@@ -125,6 +125,25 @@ class Settings(BaseSettings):
     top_k_image: int = Field(3, alias="TOP_K_IMAGE")
     top_k_audio: int = Field(3, alias="TOP_K_AUDIO")
 
+    # --- OpenAI client defaults ---
+    openai_timeout: int = Field(30, alias="OPENAI_TIMEOUT")
+    openai_max_retries: int = Field(3, alias="OPENAI_MAX_RETRIES")
+    openai_default_model: str = Field("gpt-4.1-mini", alias="OPENAI_DEFAULT_MODEL")
+
+    # --- Compression / context ---
+    compression_model: str = Field("gpt-4.1-mini", alias="COMPRESSION_MODEL")
+    compression_max_tokens: int = Field(500, alias="COMPRESSION_MAX_TOKENS")
+    max_context_tokens: int = Field(4000, alias="MAX_CONTEXT_TOKENS")
+
+    # --- Answer generation ---
+    answer_model: str = Field("gpt-4.1-mini", alias="ANSWER_MODEL")
+    answer_temperature: float = Field(0.2, alias="ANSWER_TEMPERATURE")
+    answer_timeout: int = Field(40, alias="ANSWER_TIMEOUT")
+
+    # --- Token / safety limits ---
+    max_input_tokens: int = Field(800, alias="MAX_INPUT_TOKENS")
+    max_output_tokens: int = Field(800, alias="MAX_OUTPUT_TOKENS")
+
     # -------- Validators (fail fast on bad config) --------
 
     @field_validator("embedding_provider")

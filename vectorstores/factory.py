@@ -11,12 +11,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
 from langchain_community.vectorstores import Chroma, FAISS
 from langchain_pinecone import PineconeVectorStore
 
 from config.settings import get_settings, VectorStoreType
+from embeddings.factory import get_embedder
 
 
 def _ensure_dir(path: Path) -> None:
@@ -24,18 +24,21 @@ def _ensure_dir(path: Path) -> None:
 
 
 def create_vectorstore(
-    embeddings: Embeddings,
     *,
     collection_name: Optional[str] = None,
 ) -> VectorStore:
     """
     Create a VectorStore instance for the configured backend.
 
-    - For Chroma: `collection_name` is required and maps to the Chroma collection.
-    - For FAISS:  `collection_name` selects a specific index file under FAISS_INDEX_PATH.
+    Conventions:
+    - For Chroma: `collection_name` is required and maps to a Chroma collection.
+    - For FAISS:  each logical "collection" is stored under
+                  `FAISS_INDEX_PATH/<collection_name>/` and MUST NOT be shared
+                  across different logical collections.
     - For Pinecone: `collection_name` is ignored; the configured index name is used.
     """
     cfg = get_settings()
+    embeddings = get_embedder()
 
     if cfg.vector_store == VectorStoreType.CHROMA:
         if not collection_name:
@@ -51,9 +54,12 @@ def create_vectorstore(
         )
 
     if cfg.vector_store == VectorStoreType.FAISS:
+        if collection_name is None:
+            raise ValueError("FAISS requires an explicit collection_name")
+
         base = cfg.faiss_index_path
         _ensure_dir(base)
-        index_path = base / f"{collection_name or 'default'}"
+        index_path = base / f"{collection_name}"
 
         if index_path.exists():
             # Load an existing FAISS index from disk.

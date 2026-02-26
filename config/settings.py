@@ -144,6 +144,26 @@ class Settings(BaseSettings):
     max_input_tokens: int = Field(800, alias="MAX_INPUT_TOKENS")
     max_output_tokens: int = Field(800, alias="MAX_OUTPUT_TOKENS")
 
+    # --- Query decomposition ---
+    max_sub_queries: int = Field(3, alias="MAX_SUB_QUERIES")
+
+    # --- HyDE / query rewriting ---
+    enable_hyde: bool = Field(True, alias="ENABLE_HYDE")
+    hyde_model: str = Field("gpt-4.1-mini", alias="HYDE_MODEL")
+    hyde_max_tokens: int = Field(300, alias="HYDE_MAX_TOKENS")
+    hyde_timeout: int = Field(20, alias="HYDE_TIMEOUT")
+
+    # --- Ambiguity / clarification ---
+    ambiguity_model: str = Field("gpt-4.1-mini", alias="AMBIGUITY_MODEL")
+    ambiguity_timeout: int = Field(15, alias="AMBIGUITY_TIMEOUT")
+
+    # --- Retrieval confidence ---
+    retrieval_confidence_threshold: float = Field(0.2, alias="RETRIEVAL_CONFIDENCE_THRESHOLD")
+
+    # --- Graph / pipeline ---
+    graph_max_retries: int = Field(2, alias="GRAPH_MAX_RETRIES")
+    enable_clarification: bool = Field(True, alias="ENABLE_QUERY_CLASSIFICATION")
+
     # -------- Validators (fail fast on bad config) --------
 
     @field_validator("embedding_provider")

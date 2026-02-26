@@ -18,12 +18,8 @@ from config.settings import get_settings
 
 def _default_compression_model() -> str:
     cfg = get_settings()
-    # Prefer COMPRESSION_MODEL if present; fall back to ANSWER_MODEL or OPENAI_DEFAULT_MODEL.
-    return (
-        getattr(cfg, "compression_model", None)
-        or getattr(cfg, "answer_model", None)
-        or getattr(cfg, "openai_default_model", "gpt-4.1-mini")
-    )
+    # Prefer dedicated compression model; fall back to answer/default model.
+    return cfg.compression_model or cfg.answer_model or cfg.openai_default_model
 
 
 def compress_context(docs: List[Document], query: str) -> str:
@@ -61,7 +57,11 @@ def compress_context(docs: List[Document], query: str) -> str:
 
     user_prompt = f"Question:\n{query}\n\nRetrieved context:\n{joined}"
 
-    client = OpenAI()
+    cfg = get_settings()
+    client = OpenAI(
+        api_key=cfg.openai_api_key,
+        timeout=cfg.openai_timeout,
+    )
     resp = client.chat.completions.create(
         model=_default_compression_model(),
         messages=[
@@ -69,8 +69,11 @@ def compress_context(docs: List[Document], query: str) -> str:
             {"role": "user", "content": user_prompt},
         ],
         temperature=0,
+        max_tokens=cfg.compression_max_tokens,
     )
-    return resp.choices[0].message.content or ""
+    body = resp.choices[0].message.content or ""
+    # Tag the compressed context explicitly to reduce prompt-injection risk.
+    return f"<<BEGIN COMPRESSED CONTEXT>>\n{body}\n<<END COMPRESSED CONTEXT>>"
 
 
 __all__ = ["compress_context"]

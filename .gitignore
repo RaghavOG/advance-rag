@@ -1,0 +1,51 @@
+# --- GenAI / Data Specific ---
+.env
+.env.local
+*.secret
+*.key
+data/
+datasets/
+vectorstore/
+chroma/
+faiss/
+models/
+checkpoints/
+*.pth
+*.bin
+*.gguf
+*.parquet
+*.csv
+*.jsonl
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# --- IDEs / Editors ---
+.vscode/
+.idea/
+*.swp
+
+# --- OS ---
+.DS_Store
+Thumbs.db

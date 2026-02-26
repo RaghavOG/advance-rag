@@ -1,0 +1,322 @@
+Topics for a production-grade advanced RAG pipeline
+===================================================
+
+1) Core architecture and goals
+------------------------------
+- Clarify business objectives and KPIs (latency, cost, accuracy, safety).
+- Choose deployment model (local only in your case) and resource constraints (CPU/GPU, memory).
+- Decide primary modality (text-first) and which secondary modalities to support (images, audio).
+- Define trust boundaries, data residency, and privacy constraints.
+
+2) Data ingestion and preprocessing
+-----------------------------------
+- Connectors/loaders for:
+  - PDFs, Word, Markdown, HTML, plain text, blogs, internal docs.
+  - Images (screenshots, scans, diagrams) with OCR and optional image captioning.
+  - Audio (meeting recordings, voice notes) with transcription.
+- Robust parsing:
+  - Page-wise extraction, preserving sections, headings, tables, lists.
+  - Cleaning (whitespace, boilerplate, headers/footers, duplicated content).
+  - Encoding and language handling.
+- Metadata strategy:
+  - Standard fields: `source`, `page`, `section`, `chunk_id`, `created_at`, `doc_id`, `author`, `tags`.
+  - Modality-specific fields: `modality` = {text, image, audio}, `ocr_confidence`, `audio_speaker`, etc.
+- Quality checks:
+  - Minimum content length, language detection, corruption detection.
+  - Logging and quarantining low-quality or failed documents.
+
+3) Chunking and document structuring
+------------------------------------
+- Text chunking:
+  - Recursive character or token-based chunking with overlap.
+  - Structure-aware (respect headings, paragraphs, bullet lists).
+  - Support parent–child or hierarchical chunks (section-level parent + sentence/paragraph-level children).
+- Audio transcript chunking:
+  - Time-based or sentence/paragraph-based chunks.
+  - Maintain alignment to timestamps and speakers.
+- Image text chunking:
+  - OCR blocks grouped by layout (e.g., caption vs body vs table text).
+  - Optional captions combined with OCR text.
+
+4) Embedding strategy
+---------------------
+- Use ONE primary embedding model for:
+  - Text content.
+  - OCR-extracted text from images.
+  - Transcribed text from audio.
+- Clear abstraction around embeddings:
+  - Pluggable embedding interface (can swap models later).
+  - Centralized configuration for embedding dimension, batch size, rate limits.
+- Token and cost efficiency:
+  - Only embed cleaned, deduplicated chunks.
+  - Batch embeddings and reuse cached vectors when documents are re-ingested.
+
+5) Vector stores and indexing
+-----------------------------
+- Local vector DB (Chroma or FAISS) with:
+  - Separate collections / indices:
+    - `text_index`  – primary document chunks.
+    - `image_index` – OCR/caption-based image documents.
+    - `audio_index` – audio transcript chunks.
+  - Optional metadata indexes for fast filtering and routing.
+- Index build / update workflows:
+  - Initial bulk indexing.
+  - Incremental updates and re-embedding workflows.
+  - Safe reindexing / migrations (e.g., when changing embedding model).
+- Retention and lifecycle:
+  - Policies for deleting, archiving, and reprocessing stale data.
+
+6) Retrieval and ranking
+------------------------
+- Base retrievers:
+  - Text: similarity search (+ optional MMR).
+  - Image: OCR-text similarity search over `image_index`.
+  - Audio: transcript similarity search over `audio_index`.
+- Advanced retrieval options (optional):
+  - Hybrid search (sparse + dense).
+  - Multi-query expansion, HyDE, or query rewriting for recall.
+  - Parent–child retrieval (retrieve parent, expand to children).
+- Post-retrieval processing:
+  - Score normalization across modalities.
+  - Filtering by metadata (e.g., recency, document type, modality).
+  - Rerankers (cross-encoder or LLM-based) if budget allows.
+
+7) LangGraph-based orchestration (text-first, multimodal)
+---------------------------------------------------------
+- Query understanding:
+  - Classification of query into:
+    - `text_only`
+    - `requires_visual` (needs image/diagram/screenshot context)
+    - `requires_audio`  (needs spoken content/meeting notes)
+  - Optional intent classification: question answering, summarization, comparison, troubleshooting, etc.
+- Conditional routing:
+  - Always query `text_index`.
+  - Conditionally query:
+    - `image_index` when query requires visual context.
+    - `audio_index` when query requires audio context.
+  - Combine and deduplicate retrieved chunks across modalities.
+- Graph responsibilities:
+  - ONLY: query understanding, routing, retrieval orchestration, and context preparation.
+  - No multi-agent over-engineering; one well-defined pipeline.
+
+8) Context compression and summarization
+----------------------------------------
+- Compress retrieved context before final generation to control tokens and cost:
+  - Per-modality compression (e.g., compress audio transcripts separately).
+  - Global compression that merges text, image-derived, and audio-derived snippets.
+- Techniques:
+  - Summarize-and-select: LLM compresses and keeps only highly relevant facts.
+  - Structured compression: preserve citations, doc IDs, and modality tags.
+- Guarantees:
+  - Do not introduce new facts during compression.
+  - Keep enough detail for faithful final answers.
+
+9) Answer generation (grounded and safe)
+----------------------------------------
+- Use only compressed context for answer generation.
+- System prompts must enforce:
+  - Clear separation in output:
+    - “Retrieved facts / evidence” section (cite docs, pages, modality).
+    - “Reasoning / synthesis” section.
+  - Honesty about uncertainty:
+    - If context is insufficient, say so and avoid speculation.
+  - No direct answering from external knowledge unless explicitly allowed.
+- Support multimodal references in answers:
+  - Mention when information comes from “image OCR”, “audio transcript”, or “text document”.
+
+10) LLM layer: multi-LLM and reliability
+----------------------------------------
+- LLM client abstraction:
+  - Common interface for:
+    - OpenAI (primary provider).
+    - Optional secondary providers (e.g., local models or another cloud LLM).
+  - Roles:
+    - Classification / routing LLM.
+    - Compression LLM.
+    - Answer-generation LLM.
+- Multi-LLM support:
+  - Configurable model routing:
+    - Cheap/small model for classification and compression.
+    - Stronger model for final answer when needed.
+  - Capability-based selection:
+    - Choose models by latency, cost, and quality profiles.
+- Robust retry and fallback:
+  - Retry policies:
+    - Exponential backoff on transient errors (network, 5xx).
+    - Specific handling for rate limits (e.g., backoff + queue, reduced concurrency).
+  - Provider/model fallback:
+    - If primary model fails repeatedly or is rate-limited:
+      - Fallback to another model from the same provider.
+      - Or fallback to a different provider (if configured).
+  - Idempotency safeguards:
+    - Include request IDs and logging so retries are traceable.
+
+11) Observability, logging, and monitoring
+-----------------------------------------
+- Structured logging:
+  - Ingestion logs (document IDs, sizes, errors).
+  - Retrieval logs (query, filters, scores, chosen chunks).
+  - LLM calls (model, latency, token usage, errors).
+- Metrics:
+  - Latency per stage (ingestion, retrieval, compression, generation).
+  - Token usage and cost per request.
+  - Retrieval quality signals (clicked / accepted answers, feedback).
+- Tracing:
+  - End-to-end traces per user request with correlation IDs.
+  - Debug views for which documents and modalities were used.
+
+12) Security, safety, and governance
+------------------------------------
+- Prompt injection and jailbreak defenses:
+  - Input sanitization and classification.
+  - System prompts that instruct models to ignore untrusted instructions in retrieved content.
+- Data governance:
+  - Redaction of sensitive information before embedding.
+  - Per-user or per-tenant access controls on documents.
+- Content filtering:
+  - Classify outputs for policy violations.
+  - Optionally re-generate or block inappropriate responses.
+
+13) Evaluation and continuous improvement
+----------------------------------------
+- Offline evaluation:
+  - Curated QA datasets with ground-truth answers and gold documents.
+  - Measure retrieval recall, precision, and answer quality.
+- Online evaluation:
+  - A/B tests between retrieval or prompting strategies.
+  - User feedback loops (“helpful / not helpful” & free-text feedback).
+- LLM-as-judge (optional, budget-aware):
+  - Use smaller/cheaper models for automatic scoring of responses.
+  - Periodic eval; not on every live request to save cost.
+
+14) Performance, scalability, and cost control
+---------------------------------------------
+- For personal/small scale (≤ 1k docs):
+  - Keep architecture simple and mostly local.
+  - Use small, cost-effective models where possible.
+- Performance optimizations:
+  - Caching of:
+    - Embeddings for documents.
+    - Intermediate LLM outputs (classifications, rewrites).
+  - Pre-computed summaries or synthetic Q&A pairs for hot documents.
+- Cost controls:
+  - Hard limits on tokens per request.
+  - Rate limiting by user or API key.
+
+15) Interfaces and integration
+------------------------------
+- Clean API boundaries:
+  - Ingestion CLI / jobs.
+  - Query API or CLI.
+- Clear contracts:
+  - Request/response schemas for queries (including modality hints).
+  - Stable interfaces for plugging into apps, bots, or services.
+
+
+Suggested modular structure for an advanced RAG codebase
+========================================================
+
+1) Configuration and constants
+------------------------------
+- `config/` or a central `config.py`:
+  - Environment loading (.env).
+  - Model names, temperature, timeouts.
+  - Vector DB paths, collection names (`text_index`, `image_index`, `audio_index`).
+  - Retrieval parameters (top-k per modality).
+  - Retry/backoff settings and LLM routing rules.
+
+2) Ingestion and preprocessing
+------------------------------
+- `ingestion/` package:
+  - `text_loader.py` / `document_loader.py` – load PDFs, docs, blogs, etc.
+  - `image_loader.py` – load images from files/buckets.
+  - `audio_loader.py` – load audio files/streams.
+  - `cleaning.py` – normalization, deduplication, boilerplate removal.
+  - `chunking.py` – shared chunking logic for text, OCR text, and transcripts.
+  - `metadata.py` – helpers to attach and validate metadata schemas.
+  - Ingestion CLI or jobs that call the above and persist into vector stores.
+
+3) Embeddings and vector stores
+-------------------------------
+- `embeddings/`:
+  - `base_embedder.py` – abstract interface for embeddings (one place to swap models).
+  - `openai_embedder.py` – concrete implementation using a single OpenAI embedding model.
+  - Optional: `local_embedder.py` for offline/testing scenarios.
+- `vectorstores/`:
+  - `chroma_client.py` or `faiss_client.py` – setup and configuration.
+  - `indices.py` – helpers to get or create `text_index`, `image_index`, `audio_index`.
+  - Index management utilities (rebuild, migrate, clear).
+
+4) Retrieval and ranking
+------------------------
+- `retrieval/`:
+  - `retrievers.py` – base retriever abstractions, top-k retrieval per modality.
+  - `hybrid.py` – optional hybrid retrieval logic.
+  - `rerankers.py` – optional reranking (cross-encoder or LLM-based).
+  - `query_rewriting.py` – multi-query, HyDE, or reformulation strategies.
+
+5) LLM orchestration and clients
+--------------------------------
+- `llm/`:
+  - `client_base.py` – interface for chat/completion clients (invoke, stream, with retries).
+  - `openai_client.py` – concrete implementation with:
+    - Exponential backoff, jitter.
+    - Rate limit handling (wait + retry) and structured error handling.
+  - `multi_llm_router.py` – logic for:
+    - Choosing models per task (classification vs compression vs generation).
+    - Fallback ordering (primary → secondary → tertiary).
+  - Prompt templates per task (classification, compression, answering) in a single place.
+
+6) LangGraph pipeline
+---------------------
+- `graph/`:
+  - `state.py` – typed state definitions (query, query_kind, docs, compressed_context, answer, errors).
+  - `nodes.py` – graph nodes:
+    - Query classification.
+    - Conditional retrieval per modality.
+    - Context compression.
+    - Final answer generation.
+  - `graph.py` – build and compile the LangGraph:
+    - Single pipeline, no multiple agents.
+    - Optional checkpointers if you later store serializable state.
+
+7) Evaluation and tests
+-----------------------
+- `evaluation/`:
+  - Datasets and fixtures for QA pairs.
+  - Offline eval scripts (retrieval metrics, answer quality).
+  - LLM-as-judge prompts and drivers (optional).
+- `tests/`:
+  - Unit tests for chunking, embeddings, retrieval.
+  - Integration tests that run the full RAG pipeline on a small fixture dataset.
+
+8) Observability and tooling
+----------------------------
+- `monitoring/` or `observability/`:
+  - Logging utilities (structured logs).
+  - Metrics exporters (Prometheus, OpenTelemetry, or simple CSV logs for local).
+  - Tracing utilities to track request → retrieval → generation.
+
+9) Interfaces (CLI / API)
+-------------------------
+- `cli/`:
+  - Commands for ingestion, reindexing, and running queries from the terminal.
+- `api/` (optional for local use):
+  - HTTP endpoints for querying the RAG pipeline.
+  - Simple auth and rate limiting if exposed beyond localhost.
+
+
+Multi-LLM, multimodal, and retry summary
+========================================
+
+- Always treat **text as primary**, and images/audio as supporting evidence:
+  - OCR and transcripts are converted to text and embedded with the same model.
+  - Separate indices (`text_index`, `image_index`, `audio_index`) keep modalities decoupled.
+- Wrap all LLM calls behind a **multi-LLM client**:
+  - Single interface with:
+    - Task-aware model selection.
+    - Automatic retries on transient failures.
+    - Backoff and wait when hitting rate limits.
+    - Fallback to backup models/providers when primary fails.
+- Keep this client stateless and easy to test so the rest of the RAG pipeline (ingestion, retrieval, graph) does not depend on any one LLM provider.
+

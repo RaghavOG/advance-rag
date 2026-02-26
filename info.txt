@@ -1,6 +1,25 @@
 Topics for a production-grade advanced RAG pipeline
 ===================================================
 
+
+A. Sparse retrieval (BM25) alongside vectors
+B. Retrieval confidence scoring
+C. Negative retrieval (anti-docs)
+D. Answer verification pass (cheap LLM)
+E. Citation enforcement
+F. Contradiction detection
+G. Near-duplicate detection - MinHash / SimHash | Duplicate chunks dominate retrieval
+H. Semantic versioning of documents
+I. Ingestion validation gates
+J. Retrieval & LLM result caching - Query classification | HyDE output | Embeddings for repeated queries | Final answers (short TTL)
+K. Adaptive top-k - Easy query → top-3 | Hard query → top-10 | Multi-modal → per-modality budgets
+L. Budget-aware degradation - When Rate limited or Token budget exceeded -> Skip HyDE | Reranking | long answers
+M. Explicit failure nodes -Add nodes for: Retrieval failure | Compression failure | LLM timeout -> Each with: Recovery strategy | User-facing message
+N. Clarification loop (single-turn) - If query is ambiguous: Ask one clarification -> Resume graph with user answer
+
+
+
+
 1) Core architecture and goals
 ------------------------------
 - Clarify business objectives and KPIs (latency, cost, accuracy, safety).

@@ -13,6 +13,9 @@ from __future__ import annotations
 from openai import OpenAI
 
 from config.settings import get_settings
+from utils.logger import get_logger
+
+log = get_logger(__name__)
 
 
 def _default_answer_model() -> str:
@@ -26,7 +29,10 @@ def generate_answer(compressed_context: str, query: str) -> str:
     Use an LLM to answer the query based ONLY on the compressed context.
     """
     if not compressed_context.strip():
+        log.warning("generate_answer called with empty context — returning early")
         return "I do not have any relevant context to answer this question."
+
+    log.info("━━━ GENERATION  model=%s  context_len=%d", _default_answer_model(), len(compressed_context))
 
     # NOTE: We currently allow explicit reasoning text for debuggability.
     # This can be replaced with a more concise synthesis format later.
@@ -57,9 +63,12 @@ def generate_answer(compressed_context: str, query: str) -> str:
         max_tokens=cfg.max_output_tokens,
     )
     answer = resp.choices[0].message.content or ""
+    log.info("  Answer generated: %d chars", len(answer))
+    log.debug("  Answer preview: %s…", answer[:200])
 
     # Minimal structural guard to encourage the model to follow the format.
     if "Retrieved facts" not in answer:
+        log.warning("  Answer missing 'Retrieved facts' section — prepending guard message")
         answer = (
             "The retrieved context may have been insufficient to produce a fully "
             "grounded answer in the requested format.\n\n" + answer

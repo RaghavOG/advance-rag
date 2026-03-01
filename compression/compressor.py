@@ -14,6 +14,9 @@ from langchain_core.documents import Document
 from openai import OpenAI
 
 from config.settings import get_settings
+from utils.logger import get_logger
+
+log = get_logger(__name__)
 
 
 def _default_compression_model() -> str:
@@ -31,7 +34,10 @@ def compress_context(docs: List[Document], query: str) -> str:
     - Not answer the question.
     """
     if not docs:
+        log.warning("compress_context called with 0 docs — returning empty")
         return ""
+
+    log.info("━━━ COMPRESSION  docs=%d  model=%s", len(docs), _default_compression_model())
 
     snippets = []
     for i, d in enumerate(docs, start=1):
@@ -72,6 +78,8 @@ def compress_context(docs: List[Document], query: str) -> str:
         max_tokens=cfg.compression_max_tokens,
     )
     body = resp.choices[0].message.content or ""
+    log.info("  Compressed: %d chars → %d chars", sum(len(s) for s in snippets), len(body))
+    log.debug("  Compressed context preview: %s…", body[:200])
     # Tag the compressed context explicitly to reduce prompt-injection risk.
     return f"<<BEGIN COMPRESSED CONTEXT>>\n{body}\n<<END COMPRESSED CONTEXT>>"
 

@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     )
 
     # ── Core ─────────────────────────────────────────────────────────────────
-    app_name: str = Field("advanced-rag", alias="APP_NAME")
+    app_name: str = Field("advance-rag", alias="APP_NAME")
     app_env: Literal["development", "staging", "production"] = Field(
         "development", alias="APP_ENV"
     )
@@ -120,13 +120,13 @@ class Settings(BaseSettings):
 
     # ── MongoDB ──────────────────────────────────────────────────────────────
     mongodb_uri: Optional[str] = Field(None, alias="MONGODB_URI")
-    mongodb_db_name: str = Field("multimodal-rag", alias="MONGODB_DB_NAME")
+    mongodb_db_name: str = Field("advance-rag", alias="MONGODB_DB_NAME")
 
     # ── LangSmith tracing ────────────────────────────────────────────────────
     langsmith_tracing: bool = Field(False, alias="LANGSMITH_TRACING")
     langsmith_endpoint: str = Field("https://api.smith.langchain.com", alias="LANGSMITH_ENDPOINT")
     langsmith_api_key: Optional[str] = Field(None, alias="LANGSMITH_API_KEY")
-    langsmith_project: str = Field("advanced-rag", alias="LANGSMITH_PROJECT")
+    langsmith_project: str = Field("advance-rag", alias="LANGSMITH_PROJECT")
 
     # ── Validators ───────────────────────────────────────────────────────────
 

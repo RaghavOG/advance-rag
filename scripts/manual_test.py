@@ -19,9 +19,9 @@ sys.path.insert(0, str(ROOT))
 
 os.environ.setdefault("LOG_LEVEL", "INFO")
 
+from compression.compressor import compress_context
 from ingestion.ingest import ingest_document
 from retrieval.retriever import retrieve_text
-from compression.compressor import compress_context
 from utils.logger import get_logger
 
 log = get_logger("manual_test")
@@ -79,4 +79,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -8,7 +8,7 @@ Responsibilities:
 """
 from functools import lru_cache
 
-from config.settings import get_settings, VectorStoreType
+from config.settings import VectorStoreType, get_settings
 from embeddings.base import BaseEmbedder
 from embeddings.openai import OpenAIEmbedder
 from embeddings.sentence_transformers import SentenceTransformersEmbedder
@@ -45,4 +45,3 @@ def get_embedder() -> BaseEmbedder:
 
 
 __all__ = ["get_embedder", "BaseEmbedder"]
-

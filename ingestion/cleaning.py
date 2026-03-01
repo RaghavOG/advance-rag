@@ -6,7 +6,6 @@ without getting clever. Retrieval bugs often hide in over-processed text.
 """
 import re
 
-
 WHITESPACE_RE = re.compile(r"\s+")
 
 
@@ -19,4 +18,3 @@ def clean_text(text: str) -> str:
 
 
 __all__ = ["clean_text"]
-

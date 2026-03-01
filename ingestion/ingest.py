@@ -8,13 +8,12 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 from typing import List
-from uuid import uuid4
 
 from config.settings import get_settings
-from ingestion.loaders import load_document
 from ingestion.chunking import chunk_pages
-from vectorstores.factory import create_vectorstore
+from ingestion.loaders import load_document
 from utils.logger import get_logger, log_stage
+from vectorstores.factory import create_vectorstore
 
 log = get_logger(__name__)
 
@@ -82,4 +81,3 @@ def ingest_pdf(path: Path) -> int:
 
 
 __all__ = ["ingest_document", "ingest_pdf"]
-

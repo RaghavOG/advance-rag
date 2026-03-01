@@ -1,0 +1,15 @@
+# Dependabot: optional dependency update PRs
+# https://docs.github.com/en/code-security/dependabot
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: "/frontend"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5

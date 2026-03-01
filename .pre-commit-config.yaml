@@ -1,0 +1,36 @@
+# Pre-commit: run lint (and optionally tests) before every commit.
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+# https://pre-commit.com
+
+repos:
+  # General file hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  # Lint only staged files (Ruff for .py, ESLint for frontend) — see .lintstagedrc
+  - repo: local
+    hooks:
+      - id: lint-staged
+        name: lint-staged
+        entry: npx lint-staged
+        language: system
+        pass_filenames: false
+
+  # Optional: run tests before commit (uncomment when you have tests)
+  # - repo: local
+  #   hooks:
+  #     - id: pytest
+  #       name: pytest
+  #       entry: pytest tests/ -q
+  #       language: system
+  #       pass_filenames: false

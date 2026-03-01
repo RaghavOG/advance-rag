@@ -6,7 +6,7 @@ reasonable size while preserving as much structure as possible.
 """
 from __future__ import annotations
 
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -63,4 +63,3 @@ def chunk_pages(pages: List[PageText]) -> List[Dict[str, Any]]:
 
 
 __all__ = ["chunk_pages"]
-

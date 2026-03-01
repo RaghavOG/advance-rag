@@ -1,0 +1,8 @@
+{
+  "name": "advance-rag",
+  "private": true,
+  "description": "Root package for pre-commit and lint-staged (Python + frontend monorepo)",
+  "devDependencies": {
+    "lint-staged": "^15.2.10"
+  }
+}

@@ -1,5 +1,5 @@
 """
-FastAPI entry point for the Multimodal RAG backend.
+FastAPI entry point for the Advance RAG backend (github.com/RaghavOG/advance-rag).
 
 Run with:
     uvicorn backend.main:app --reload --port 8000
@@ -16,12 +16,13 @@ Routes:
 from __future__ import annotations
 
 import os
-
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from backend.routes.query import router as query_router
 from utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -84,11 +85,9 @@ async def _lifespan(app: FastAPI):
         pass
 
 
-from backend.routes.query import router as query_router
-
 app = FastAPI(
-    title="Multimodal RAG API",
-    description="Production-grade RAG pipeline with LangGraph orchestration",
+    title="Advance RAG API",
+    description="Production-grade RAG pipeline with LangGraph orchestration (github.com/RaghavOG/advance-rag)",
     version="1.0.0",
     lifespan=_lifespan,
 )
@@ -210,7 +209,7 @@ def _build_html(report) -> str:
   <div class="page">
     <div class="header">
       <div>
-        <div class="title">Multimodal <span>RAG</span> — System Health</div>
+        <div class="title">Advance <span>RAG</span> — System Health</div>
         <div style="font-size:.75rem;color:#475569;margin-top:.3rem">{report.timestamp}</div>
       </div>
       <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
@@ -273,8 +272,9 @@ async def health(request: Request):
     """
     Returns JSON when Accept: application/json, otherwise redirects to the HTML dashboard.
     """
-    from backend.health import run_all_checks
     from fastapi.responses import RedirectResponse
+
+    from backend.health import run_all_checks
     accept = request.headers.get("accept", "")
     if "application/json" in accept:
         report = run_all_checks()

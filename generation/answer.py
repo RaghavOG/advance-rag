@@ -78,4 +78,3 @@ def generate_answer(compressed_context: str, query: str) -> str:
 
 
 __all__ = ["generate_answer"]
-

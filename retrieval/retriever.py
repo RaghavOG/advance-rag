@@ -9,15 +9,15 @@ Responsibilities:
 """
 from __future__ import annotations
 
-from typing import List, Optional, Dict, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from langchain_core.documents import Document
 
 from config.settings import get_settings
 from embeddings.factory import get_embedder
-from query.rewrite import rewrite_queries, generate_hyde_document
-from vectorstores.factory import create_vectorstore
+from query.rewrite import generate_hyde_document, rewrite_queries
 from utils.logger import get_logger
+from vectorstores.factory import create_vectorstore
 
 log = get_logger(__name__)
 
@@ -155,4 +155,3 @@ __all__ = ["retrieve_text"]
 # Apply:
     # top-k
     # metadata filters
-

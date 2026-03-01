@@ -1,0 +1,17 @@
+{
+  "backend/**/*.py": ["ruff check --fix"],
+  "config/**/*.py": ["ruff check --fix"],
+  "database/**/*.py": ["ruff check --fix"],
+  "embeddings/**/*.py": ["ruff check --fix"],
+  "generation/**/*.py": ["ruff check --fix"],
+  "graph/**/*.py": ["ruff check --fix"],
+  "ingestion/**/*.py": ["ruff check --fix"],
+  "pipeline/**/*.py": ["ruff check --fix"],
+  "query/**/*.py": ["ruff check --fix"],
+  "retrieval/**/*.py": ["ruff check --fix"],
+  "compression/**/*.py": ["ruff check --fix"],
+  "scripts/**/*.py": ["ruff check --fix"],
+  "utils/**/*.py": ["ruff check --fix"],
+  "vectorstores/**/*.py": ["ruff check --fix"],
+  "frontend/**/*.{js,jsx,ts,tsx}": ["cd frontend && npm run lint"]
+}

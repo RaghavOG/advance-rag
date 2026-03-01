@@ -17,4 +17,3 @@ class BaseEmbedder(Embeddings):
 
     # No extra methods for now; LangChain's abstract methods define the surface.
     pass
-

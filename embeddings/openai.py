@@ -19,4 +19,3 @@ class OpenAIEmbedder(OpenAIEmbeddings, BaseEmbedder):
 
 
 __all__ = ["OpenAIEmbedder"]
-

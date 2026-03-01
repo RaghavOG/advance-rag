@@ -14,4 +14,3 @@ class SentenceTransformersEmbedder(SentenceTransformerEmbeddings, BaseEmbedder):
 
 
 __all__ = ["SentenceTransformersEmbedder"]
-

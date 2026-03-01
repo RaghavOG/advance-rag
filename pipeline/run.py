@@ -18,8 +18,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict
 
-from ingestion.ingest import ingest_pdf
 from graph.graph import rag_graph
+from ingestion.ingest import ingest_pdf
 from utils.logger import get_logger, log_stage
 
 log = get_logger(__name__)
@@ -59,4 +59,3 @@ def answer_question(pdf_path: str | Path, question: str) -> str:
 
 
 __all__ = ["answer_question"]
-

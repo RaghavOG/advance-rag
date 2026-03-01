@@ -121,4 +121,3 @@ def load_document(path: Path, *, doc_id: str) -> List[PageText]:
 
 
 __all__ = ["PageText", "load_pdf_pages", "load_text_file", "load_document"]
-

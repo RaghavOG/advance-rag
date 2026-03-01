@@ -85,4 +85,3 @@ def compress_context(docs: List[Document], query: str) -> str:
 
 
 __all__ = ["compress_context"]
-

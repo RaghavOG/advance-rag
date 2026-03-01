@@ -109,4 +109,3 @@ def generate_hyde_document(query: str) -> str:
 
 
 __all__ = ["rewrite_queries", "generate_hyde_document"]
-

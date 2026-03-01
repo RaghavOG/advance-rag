@@ -19,11 +19,10 @@ Checks performed:
 from __future__ import annotations
 
 import importlib
-import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -46,7 +45,7 @@ class CheckResult(BaseModel):
 
 class HealthReport(BaseModel):
     overall: Literal["healthy", "degraded", "unhealthy"]
-    service: str = "multimodal-rag"
+    service: str = "advance-rag"
     version: str = "1.0.0"
     timestamp: str
     checks: List[CheckResult]
@@ -111,7 +110,9 @@ def check_openai_key() -> CheckResult:
             )
 
         # Lightweight probe: list models (no token cost).
-        from openai import OpenAI, AuthenticationError, APIConnectionError, RateLimitError
+        from openai import (
+            OpenAI,
+        )
         client = OpenAI(api_key=key, timeout=8)
         client.models.list()
 
@@ -151,7 +152,7 @@ def check_embedding() -> CheckResult:
         return CheckResult(
             name="embedding",
             status="ok",
-            message=f"Embedding model operational",
+            message="Embedding model operational",
             detail=f"dimension={dim}  model={getattr(embedder, 'model', 'unknown')}",
         )
     except Exception as exc:
@@ -191,18 +192,23 @@ def check_vector_store() -> CheckResult:
             ),
         )
     except Exception as exc:
+        detail_raw = str(exc) + repr(exc)
         detail = str(exc)[:300]
         msg = "Vector store connection failed"
-        if "404" in detail or "Not Found" in detail:
-            from config.settings import get_settings
-            cfg = get_settings()
-            idx = getattr(cfg, "pinecone_index_name", None) or "?"
-            dim = getattr(cfg, "pinecone_dimension", None) or "?"
+        # Pinecone 404: index name does not exist in the project.
+        if "404" in detail_raw or "not found" in detail_raw.lower():
+            try:
+                from config.settings import get_settings
+                cfg = get_settings()
+                idx = getattr(cfg, "pinecone_index_name", None) or "?"
+                dim = getattr(cfg, "pinecone_dimension", None) or "?"
+            except Exception:
+                idx, dim = "?", "?"
             msg = "Pinecone index not found (404)"
             detail = (
                 f"The index '{idx}' does not exist in your Pinecone project. "
-                f"Create it in Pinecone Console: dimension={dim}, metric=cosine, "
-                f"region matching PINECONE_ENVIRONMENT. Then re-run the health check."
+                f"Either create it in Pinecone Console (app.pinecone.io): dimension={dim}, metric=cosine, "
+                f"region = PINECONE_ENVIRONMENT — or for local dev set VECTOR_STORE=chroma in .env (no Pinecone needed)."
             )
         return CheckResult(
             name="vector_store",

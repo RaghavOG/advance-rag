@@ -11,11 +11,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
+from langchain_community.vectorstores import FAISS, Chroma
 from langchain_core.vectorstores import VectorStore
-from langchain_community.vectorstores import Chroma, FAISS
 from langchain_pinecone import PineconeVectorStore
 
-from config.settings import get_settings, VectorStoreType
+from config.settings import VectorStoreType, get_settings
 from embeddings.factory import get_embedder
 
 
@@ -88,4 +88,3 @@ def create_vectorstore(
 
 
 __all__ = ["create_vectorstore"]
-

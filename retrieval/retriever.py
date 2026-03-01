@@ -9,12 +9,36 @@ Responsibilities:
 """
 from __future__ import annotations
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 
 from langchain_core.documents import Document
 
 from config.settings import get_settings
+from embeddings.factory import get_embedder
+from query.rewrite import rewrite_queries, generate_hyde_document
 from vectorstores.factory import create_vectorstore
+from utils.logger import get_logger
+
+log = get_logger(__name__)
+
+
+def _adaptive_top_k(query: str, num_rewrites: int, base_k: int) -> int:
+    """
+    Heuristic adaptive top-k.
+    """
+    text = query.lower()
+    long_or_explanatory = any(
+        kw in text for kw in ["explain", "overview", "why", "how", "compare", "list"]
+    ) or len(query) > 120
+
+    if num_rewrites <= 1:
+        # Single query: small factual -> 3; otherwise base_k.
+        if not long_or_explanatory and base_k >= 3:
+            return 3
+        return base_k
+
+    # Multiple rewrites: keep per-rewrite k modest.
+    return max(2, min(3, base_k))
 
 
 def retrieve_text(
@@ -24,21 +48,102 @@ def retrieve_text(
     metadata_filter: Optional[Dict[str, Any]] = None,
 ) -> List[Document]:
     """
-    Retrieve top-k text chunks for a query.
-
-    For now this is text-only and targets the text collection from Settings.
+    Retrieve top-k text chunks for a query using:
+    - LLM-based query rewriting.
+    - Optional HyDE document retrieval.
+    - Adaptive per-rewrite top-k.
     """
     cfg = get_settings()
+    log.info("━━━ RETRIEVAL  query=%r", query[:80])
+
     vs = create_vectorstore(collection_name=cfg.chroma_collection_text)
 
-    top_k = k or cfg.top_k_text
-    # All supported backends expose similarity_search with filter support.
-    docs = vs.similarity_search(
-        query,
-        k=top_k,
-        filter=metadata_filter,
-    )
-    return docs
+    # Rewrites (always include original query as first element).
+    rewrites = rewrite_queries(query)
+    per_rewrite_k = _adaptive_top_k(query, len(rewrites), base_k=cfg.top_k_text)
+    log.info("  rewrites=%d  per_rewrite_k=%d  base_k=%d", len(rewrites), per_rewrite_k, cfg.top_k_text)
+
+    # Collect (Document, score) pairs from similarity_search_with_score.
+    results: List[Tuple[Document, float]] = []
+    for rewrite_id, rq in enumerate(rewrites):
+        log.debug("  [rewrite %d] %r", rewrite_id, rq[:80])
+        try:
+            scored = vs.similarity_search_with_score(rq, k=per_rewrite_k, filter=metadata_filter)
+            log.debug("    → %d result(s)  scores=%s", len(scored),
+                      [round(s, 4) for _, s in scored])
+        except Exception as exc:
+            log.warning("  similarity_search_with_score failed (%s) — falling back to unscored", exc)
+            docs_only = vs.similarity_search(rq, k=per_rewrite_k, filter=metadata_filter)
+            scored = [(d, 0.0) for d in docs_only]
+
+        for doc, score in scored:
+            doc.metadata = doc.metadata or {}
+            if "rewrite_id" not in doc.metadata:
+                doc.metadata["rewrite_id"] = rewrite_id
+            results.append((doc, float(score)))
+
+    log.info("  Raw results before dedup: %d", len(results))
+
+    # HyDE: use a hypothetical document as a vector query.
+    hyde_doc = generate_hyde_document(query)
+    hyde_docs: List[Document] = []
+    if hyde_doc:
+        log.info("  Running HyDE vector search")
+        try:
+            embedder = get_embedder()
+            vec = embedder.embed_query(hyde_doc)
+            hyde_docs = vs.similarity_search_by_vector(vec, k=per_rewrite_k, filter=metadata_filter)
+            for doc in hyde_docs:
+                doc.metadata = doc.metadata or {}
+                doc.metadata["hyde"] = True
+            log.info("  HyDE returned %d doc(s)", len(hyde_docs))
+        except Exception as exc:
+            log.warning("  HyDE search failed (%s) — skipped", exc)
+            hyde_docs = []
+
+    # Merge & deduplicate.
+    def _key(d: Document) -> Tuple[Any, Any]:
+        m = d.metadata or {}
+        doc_id = m.get("doc_id") or m.get("source")
+        chunk_id = m.get("chunk_id")
+        return (doc_id, chunk_id)
+
+    seen: set = set()
+    final_docs: List[Document] = []
+
+    for doc, score in sorted(results, key=lambda x: x[1]):
+        key = _key(doc)
+        if key in seen:
+            continue
+        seen.add(key)
+        final_docs.append(doc)
+        if k is not None and len(final_docs) >= k:
+            break
+        if k is None and len(final_docs) >= cfg.top_k_text:
+            break
+
+    for doc in hyde_docs:
+        key = _key(doc)
+        if key in seen:
+            continue
+        seen.add(key)
+        final_docs.append(doc)
+        if k is not None and len(final_docs) >= k:
+            break
+        if k is None and len(final_docs) >= cfg.top_k_text:
+            break
+
+    log.info("  Final retrieved docs: %d  sources=%s",
+             len(final_docs),
+             list({d.metadata.get("source", "?") for d in final_docs}))
+
+    for i, doc in enumerate(final_docs):
+        m = doc.metadata
+        log.debug("  [doc %d] src=%s  page=%s  chunk=%s  hyde=%s  preview=%r",
+                  i, m.get("source", "?"), m.get("page"), m.get("chunk_id"),
+                  m.get("hyde", False), doc.page_content[:60])
+
+    return final_docs
 
 
 __all__ = ["retrieve_text"]

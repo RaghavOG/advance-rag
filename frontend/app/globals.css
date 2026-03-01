@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-geist-sans: ui-sans-serif, system-ui, sans-serif;
+  --font-geist-mono: ui-monospace, monospace;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-[#0f1117] text-slate-200 antialiased;
+  font-family: var(--font-geist-sans);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { @apply bg-transparent; }
+::-webkit-scrollbar-thumb { @apply bg-slate-700 rounded-full; }
+::-webkit-scrollbar-thumb:hover { @apply bg-slate-600; }
+
+/* Markdown-like prose inside answers */
+.answer-prose p  { @apply mb-3 leading-relaxed text-slate-300; }
+.answer-prose ul { @apply list-disc list-inside mb-3 space-y-1 text-slate-300; }
+.answer-prose ol { @apply list-decimal list-inside mb-3 space-y-1 text-slate-300; }
+.answer-prose strong { @apply text-slate-100 font-semibold; }
+.answer-prose code { @apply text-brand-light bg-surface-elevated px-1.5 py-0.5 rounded text-sm font-mono; }
+
+/* Reduced-motion: disable all animations */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Gradient text utility */
+.gradient-text {
+  @apply bg-gradient-to-r from-brand-light via-purple-400 to-cyan-400 bg-clip-text text-transparent;
+}
+
+/* Pipeline flow connector lines */
+.flow-connector {
+  @apply border-l-2 border-dashed border-surface-border ml-4 pl-4;
+}

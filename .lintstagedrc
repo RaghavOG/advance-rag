@@ -13,5 +13,5 @@
   "scripts/**/*.py": ["ruff check --fix"],
   "utils/**/*.py": ["ruff check --fix"],
   "vectorstores/**/*.py": ["ruff check --fix"],
-  "frontend/**/*.{js,jsx,ts,tsx}": ["cd frontend && npm run lint"]
+  "frontend/**/*.{js,jsx,ts,tsx}": ["npm run lint --prefix frontend"]
 }

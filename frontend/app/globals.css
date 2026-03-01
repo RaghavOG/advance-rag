@@ -1,6 +1,55 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/* Tailwind v4 theme: custom colors and animations (replaces tailwind.config theme) */
+@theme {
+  /* Surface palette */
+  --color-surface: #0f1117;
+  --color-surface-card: #161b27;
+  --color-surface-elevated: #1e2535;
+  --color-surface-border: #252d3d;
+
+  /* Brand */
+  --color-brand: #6366f1;
+  --color-brand-muted: #4f46e5;
+  --color-brand-light: #818cf8;
+
+  /* Semantic */
+  --color-success: #10b981;
+  --color-success-muted: #065f46;
+  --color-success-light: #6ee7b7;
+  --color-warning: #f59e0b;
+  --color-warning-muted: #78350f;
+  --color-warning-light: #fcd34d;
+  --color-danger: #f43f5e;
+  --color-danger-muted: #881337;
+  --color-danger-light: #fda4af;
+
+  /* Neutral */
+  --color-neutral-50: #f8fafc;
+  --color-neutral-400: #94a3b8;
+  --color-neutral-500: #64748b;
+  --color-neutral-700: #334155;
+  --color-neutral-900: #0f172a;
+
+  /* Animations */
+  --animate-progress-loop: progressLoop 2s ease-in-out infinite;
+  --animate-pulse-soft: pulseSoft 2s ease-in-out infinite;
+  --animate-fade-up: fadeUp 0.25s ease-out forwards;
+
+  @keyframes progressLoop {
+    0% { width: 20%; margin-left: 0%; }
+    50% { width: 40%; margin-left: 30%; }
+    100% { width: 20%; margin-left: 80%; }
+  }
+  @keyframes pulseSoft {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
 
 :root {
   --font-geist-sans: ui-sans-serif, system-ui, sans-serif;

@@ -1,33 +1,47 @@
-# --- GenAI / Data Specific ---
+# =========================================================
+# 🔐 ENV & SECRETS (CRITICAL)
+# =========================================================
 .env
-.env.local
+.env.*
 *.secret
 *.key
-data/
-datasets/
-vectorstore/
-chroma/
-faiss/
-models/
-checkpoints/
-*.pth
-*.bin
-*.gguf
-*.parquet
-*.csv
-*.jsonl
+*.pem
+*.crt
+*.p12
 
-# --- Python ---
+# =========================================================
+# ⚡ Next.js / Node.js
+# =========================================================
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+.vercel
+.turbo
+
+# =========================================================
+# 🐍 Python
+# =========================================================
 __pycache__/
 *.py[cod]
 *$py.class
+
 venv/
 .venv/
 env/
-.env/
+ENV/
+
 build/
-develop-eggs/
 dist/
+develop-eggs/
 downloads/
 eggs/
 .eggs/
@@ -41,11 +55,59 @@ wheels/
 .installed.cfg
 *.egg
 
-# --- IDEs / Editors ---
+# Python cache
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# =========================================================
+# 🤖 GenAI / ML / Data
+# =========================================================
+
+# Raw data
+data/
+datasets/
+
+# Vector stores
+vectorstore/
+chroma/
+faiss/
+
+# Model weights & checkpoints
+models/
+checkpoints/
+*.pth
+*.bin
+*.gguf
+*.ckpt
+*.onnx
+
+# Large data files
+*.parquet
+*.csv
+*.jsonl
+
+# =========================================================
+# 🐳 Docker
+# =========================================================
+.dockerignore
+
+# =========================================================
+# 🧠 Logs
+# =========================================================
+logs/
+*.log
+
+# =========================================================
+# 🖥 IDEs / Editors
+# =========================================================
 .vscode/
 .idea/
 *.swp
+*.swo
 
-# --- OS ---
+# =========================================================
+# 💻 OS Files
+# =========================================================
 .DS_Store
 Thumbs.db

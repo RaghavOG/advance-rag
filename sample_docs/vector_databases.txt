@@ -1,0 +1,81 @@
+Vector Databases: Architecture, Trade-offs, and Selection Guide
+
+What is a Vector Database?
+
+A vector database is a data storage system optimized for storing, indexing, and querying high-dimensional vector embeddings. Unlike relational databases that filter rows by column predicates, vector databases find the nearest neighbors to a query vector using approximate nearest neighbor (ANN) algorithms. They are the retrieval backbone of modern AI applications including RAG, semantic search, recommendation systems, and anomaly detection.
+
+Embedding Dimensions
+
+Text embedding models produce vectors of fixed dimension. Common dimensions:
+- text-embedding-3-small (OpenAI): 1536 dimensions
+- text-embedding-3-large (OpenAI): 3072 dimensions
+- all-MiniLM-L6-v2 (SentenceTransformers): 384 dimensions
+- all-mpnet-base-v2 (SentenceTransformers): 768 dimensions
+
+Dimension directly affects storage cost, index build time, and query latency. Smaller dimensions are faster but may sacrifice retrieval quality for nuanced queries.
+
+Distance Metrics
+
+The core retrieval operation is "find the k vectors most similar to this query vector." Different metrics define similarity differently:
+
+Cosine similarity measures the angle between two vectors regardless of magnitude. It is the most common metric for text embeddings and is equivalent to dot product when vectors are unit-normalized. Cosine distance = 1 - cosine similarity.
+
+L2 (Euclidean) distance measures the straight-line distance between two points in embedding space. Works well for dense embeddings and is the native metric for FAISS's flat indexes.
+
+Dot product (inner product) is used when magnitude matters. Not suitable for normalized embeddings (it degenerates to cosine similarity). Used in maximum inner product search (MIPS) problems.
+
+ANN Index Algorithms
+
+Approximate Nearest Neighbor algorithms sacrifice a small amount of recall for dramatically faster query times. The key algorithms are:
+
+HNSW (Hierarchical Navigable Small World): A graph-based index that builds a layered proximity graph. Queries traverse from sparse upper layers to dense lower layers. Excellent query speed and recall. High memory consumption. Used by Chroma, Weaviate, Milvus, Pinecone.
+
+IVF (Inverted File Index): Clusters vectors using k-means. At query time, only nearby clusters are searched (nprobe parameter). Lower memory than HNSW but requires a training phase. Used extensively in FAISS.
+
+PQ (Product Quantization): Compresses vectors by splitting them into sub-vectors and quantizing each. Reduces memory by 8-32x at the cost of some recall. Often combined with IVF as IVF-PQ. Essential for billion-scale datasets.
+
+Flat (brute-force): Exact nearest neighbor search with no approximation. Highest recall (100%) but O(n) per query. Only viable for small datasets (< 100k vectors).
+
+Chroma: Local Persistent Vector Store
+
+Chroma is an open-source embedding database designed for RAG applications. It persists data to disk using DuckDB + Parquet under the hood. Collections in Chroma correspond to separate namespaces with independent HNSW indexes.
+
+Strengths: Dead-simple API, integrates natively with LangChain, persistent by default, no external services required. Ideal for local development and personal projects with under 1 million vectors.
+
+Limitations: Not designed for multi-node deployments. Performance degrades for very large collections. No native support for distributed replication.
+
+FAISS: High-Performance Local Search
+
+FAISS (Facebook AI Similarity Search) is a C++ library with Python bindings for efficient similarity search. It supports many index types (Flat, IVF, HNSW, PQ, ScaNN) and can run on GPU.
+
+FAISS is not a database — it has no persistence layer by default. Indexes must be explicitly saved to disk and loaded on restart. In LangChain, the FAISS wrapper handles serialization to a folder containing index.faiss and index.pkl files. One logical collection equals one FAISS index directory.
+
+Strengths: Extremely fast, battle-tested at Meta scale, GPU acceleration, fine-grained control over index types. Essential for performance-critical local deployments.
+
+Limitations: No built-in metadata storage or filtering (metadata must be maintained separately). No server mode — purely in-process.
+
+Pinecone: Managed Cloud Vector Database
+
+Pinecone is a fully managed vector database service. It abstracts away index management, replication, and scaling. Indexes are created with a fixed dimension and metric at creation time.
+
+Pinecone uses a serverless architecture where storage and compute are separated. The pod-based model allows precise control over hardware. It supports metadata filtering (filter by attributes at query time), namespaces (logical sub-divisions of an index), and hybrid search (sparse + dense).
+
+Strengths: Zero infrastructure management, automatic scaling, sub-millisecond latency at scale, native metadata filtering.
+
+Limitations: Paid service with per-vector and per-query pricing. Data leaves your infrastructure. Cold-start latency on serverless tier.
+
+Selecting the Right Store
+
+For local personal projects (< 1M vectors): Chroma is the best default. Simple to set up, persists automatically, LangChain native.
+
+For high-performance local use: FAISS with IVF-PQ indexes. Requires more setup but offers superior throughput and memory efficiency.
+
+For production cloud deployments: Pinecone for simplicity, or Weaviate/Milvus for self-hosted managed options.
+
+Critical consideration: Changing embedding models after initial indexing requires re-embedding and re-indexing all documents. The embedding dimension must match the index dimension exactly. Always validate this at startup.
+
+Metadata Filtering
+
+Most production vector stores support pre-filtering by metadata before ANN search. This allows queries like "find the 5 most similar chunks where source='kafka_docs' and date > '2024-01-01'". Metadata filters dramatically reduce the search space and improve relevance for multi-document corpora.
+
+FAISS does not natively support metadata filtering. LangChain's FAISS wrapper applies post-hoc Python filtering, which scans all results. For filtered search at scale, prefer Chroma or Pinecone.

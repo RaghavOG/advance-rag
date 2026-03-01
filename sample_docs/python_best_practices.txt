@@ -1,0 +1,75 @@
+Python Best Practices for Production AI Systems
+
+This document covers the Python engineering practices that separate a working prototype from a maintainable, production-grade AI application.
+
+Type Annotations and Static Analysis
+
+Use type annotations on every function signature and class attribute. Python's type system is structural (duck-typed at runtime) but annotations enable static analysis via mypy, pyright, or Pytype. They serve as machine-verified documentation.
+
+Use from __future__ import annotations at the top of every module to defer annotation evaluation (PEP 563). This avoids circular import issues in type annotations and allows forward references without string quoting.
+
+Prefer specific types over Any. Use Optional[str] instead of str | None when targeting older Python, and use the | union syntax for Python 3.10+. Use TypedDict for structured dicts and dataclass or Pydantic models for structured data.
+
+Run mypy --strict or pyright in your CI pipeline. Treat type errors as build failures.
+
+Configuration Management
+
+Never hardcode configuration values in source code. All configuration (API keys, model names, database paths, timeouts, thresholds) belongs in environment variables, loaded at startup.
+
+Use pydantic-settings (pydantic.v1.BaseSettings or the newer pydantic-settings package) to load and validate configuration from environment variables. Define explicit types and defaults. Add validators for cross-field constraints (e.g., if vector_store == "pinecone" then pinecone_api_key must be set). Fail fast at startup on invalid configuration — never silently fall back to wrong defaults.
+
+Never commit .env files. Commit .env.example with placeholder values and comprehensive documentation of every variable.
+
+Dependency Management
+
+Pin exact versions in requirements.txt for reproducible builds. Use pip-compile (pip-tools) or Poetry to manage transitive dependency resolution. Distinguish direct dependencies from transitive ones.
+
+Create separate requirements files for different environments: requirements.txt (production), requirements-dev.txt (testing and linting), requirements-docs.txt (documentation generation).
+
+Use virtual environments religiously. Never install into the system Python. Consider pyenv for managing multiple Python versions.
+
+Logging Best Practices
+
+Use Python's standard logging module — never print() in production code. Configure a root logger with appropriate handlers (console, file, structured JSON for cloud). Use module-scoped loggers with getLogger(__name__) so log messages are automatically namespaced.
+
+Log at appropriate levels: DEBUG for per-item details and intermediate states, INFO for stage entry/exit and counts, WARNING for recoverable anomalies and fallbacks, ERROR for failures before re-raise, CRITICAL for application-level fatal errors.
+
+Include structured context in log messages: document names, chunk counts, latency in milliseconds, model names. This makes logs searchable and correlatable. Avoid log messages that require reading source code to interpret.
+
+Error Handling
+
+Catch specific exceptions, not bare except: clauses. Bare except catches SystemExit and KeyboardInterrupt, which is almost never desired. Catch the most specific exception class possible.
+
+Use contextlib.contextmanager for resource cleanup rather than try/finally boilerplate. Let exceptions propagate unless you can meaningfully handle or enrich them. When catching and re-raising, preserve the original exception chain with raise ... from exc.
+
+Document expected exceptions in docstrings or type stubs. Use custom exception classes (class IngestError(RuntimeError): pass) to distinguish domain errors from system errors.
+
+Singletons and Caching
+
+Use functools.lru_cache(maxsize=1) to cache expensive singleton objects (LLM clients, embedding models, vector store connections). This ensures they are created once and reused across calls without global state.
+
+Be careful with mutable objects in caches — lru_cache uses argument identity/hashing for cache keys. Pydantic models and dataclasses are not hashable by default.
+
+For thread-safe singletons in async applications, use asyncio.Lock with a double-checked locking pattern.
+
+Async and Concurrency
+
+FastAPI and modern Python web frameworks are async-first. Use async def for I/O-bound operations (HTTP calls, database queries) and run CPU-bound work in a thread pool via asyncio.run_in_executor.
+
+Avoid blocking the event loop with synchronous I/O in async contexts. LLM API clients (OpenAI, Anthropic) provide async clients (AsyncOpenAI) — use them in async routes. LangChain's LCEL (LangChain Expression Language) supports async execution natively.
+
+Testing Strategy
+
+Write unit tests for pure functions (chunking, cleaning, text processing) without any mocking. Write integration tests that test the full ingestion and retrieval pipeline using a small fixture dataset.
+
+Mock external API calls (OpenAI, Pinecone) in unit tests to avoid cost and latency. Use pytest-mock or unittest.mock.patch. Record real responses with vcrpy for snapshot testing.
+
+Use pytest fixtures to share expensive setup (vector store initialization, embedding model loading) across tests within a session.
+
+Project Structure
+
+Organize code by domain responsibility, not by technical layer. A retrieval/ package contains all retrieval logic. An ingestion/ package contains all ingestion logic. Avoid god modules.
+
+Keep utils/ minimal — mostly helpers that have no better home. Avoid circular imports by keeping a clear dependency hierarchy: utils ← config ← ingestion ← retrieval ← graph.
+
+Use __all__ in every module to explicitly declare the public API.

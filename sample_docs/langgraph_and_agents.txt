@@ -1,0 +1,79 @@
+LangGraph: Stateful, Controllable AI Pipelines
+
+What is LangGraph?
+
+LangGraph is a library built on top of LangChain for creating stateful, multi-step AI applications using a graph abstraction. Unlike simple chain-based pipelines (where each step flows linearly to the next), LangGraph allows cycles, conditional branching, and explicit state management. It is built on top of the concepts of directed graphs where nodes are processing steps and edges define control flow.
+
+LangGraph is NOT an agent framework in the traditional sense. It does not autonomously decide which tools to use in an open-ended loop. Instead, it provides a structured way to define exactly which control flows exist and under what conditions they trigger. This makes it far more predictable and debuggable than autonomous agents.
+
+Core Abstractions
+
+State: The fundamental unit in LangGraph is a typed state object (typically a TypedDict) that flows through every node. Each node receives the full state, processes it, and returns a partial dict with updated keys. LangGraph merges the returned dict into the current state. State is the single source of truth — no hidden variables.
+
+Nodes: A node is a Python function that accepts state as a dict and returns a partial state update. Nodes should be pure or nearly-pure functions: given the same state, produce the same output. Side effects (LLM calls, vector store queries) are acceptable but should be isolated.
+
+Edges: Edges connect nodes. A fixed edge always routes from node A to node B. A conditional edge uses a routing function that examines state and returns the name of the next node to route to. This is how branching and dynamic flow work.
+
+Entry point: One node is designated as the entry point where graph execution begins.
+
+END: A special sentinel that terminates graph execution when an edge routes to it.
+
+Compiling a Graph
+
+A StateGraph is built by adding nodes and edges, then calling .compile(). The compiled graph has an .invoke() method (synchronous) and .ainvoke() (async). Compiled graphs are serializable and can be run with a checkpointer for persistent state across sessions.
+
+graph = StateGraph(MyState)
+graph.add_node("node_a", node_a_fn)
+graph.add_node("node_b", node_b_fn)
+graph.set_entry_point("node_a")
+graph.add_conditional_edges("node_a", routing_fn, {"route1": "node_b", "route2": END})
+graph.add_edge("node_b", END)
+compiled = graph.compile()
+result = compiled.invoke({"raw_input": "hello"})
+
+Checkpointers and Persistence
+
+LangGraph supports checkpointers that save state between node executions. This enables resumable workflows — for example, a workflow that pauses to ask the user a clarification question can save state, return to the caller, and resume from the same state when the user responds. The MemorySaver checkpointer stores state in-memory. SqliteSaver and PostgresSaver offer persistent storage.
+
+Checkpointers are essential for multi-turn conversations and human-in-the-loop patterns where execution must pause for user input.
+
+Comparison with Simple Chains
+
+LangChain's LCEL (LangChain Expression Language) chains are linear pipelines: input | step1 | step2 | output. They are ideal for simple retrieval-answer pipelines with no branching or state. LangGraph is necessary when you need:
+
+- Cycles (retry loops, multi-hop retrieval)
+- Conditional routing (route to different nodes based on query type or intermediate results)
+- Persistent state across turns (conversation memory, clarification loops)
+- Explicit failure handling (each failure mode is a named node with a defined recovery strategy)
+- Parallel subgraphs (fan-out/fan-in patterns)
+
+When NOT to Use LangGraph
+
+LangGraph adds complexity. For a simple single-turn Q&A over a small document set, a plain Python pipeline (ingest → retrieve → compress → generate) is more readable, testable, and debuggable. Use LangGraph when the control flow genuinely requires cycles, branching, or state that persists across invocations.
+
+Avoid building autonomous agents that decide their own tool sequences unless you have a strong reason. Autonomous agents are hard to test, unpredictable in production, and difficult to audit. Prefer explicit conditional routing where every possible path is enumerated.
+
+Failure Nodes as First-Class Citizens
+
+A key architectural principle: failures should be explicit nodes, not exceptions. Instead of catching an exception and returning a generic error, route to a dedicated failure node that has its own state, recovery strategy, and user-facing message.
+
+For example:
+- retrieval_failure_node: triggered when no documents pass the confidence threshold
+- compression_failure_node: triggered when context compression fails (token overflow, LLM error)
+- llm_timeout_failure_node: triggered when generation retries are exhausted
+
+Each failure node produces a clear, honest user-facing message and can attempt recovery (e.g., compression_failure_node falls back to extractive compression rather than LLM-based).
+
+This pattern makes system behavior transparent and testable — you can write tests that assert which failure node is triggered given a specific input state.
+
+Multi-Query Handling in LangGraph
+
+A common pattern in RAG pipelines is multi-query handling: the user asks several independent questions in one prompt, each of which must be answered with its own retrieval context.
+
+In LangGraph, this is implemented as a loop. A detect_multi_query node splits the prompt into sub-queries. The graph then iterates through each sub-query, running the full RAG subgraph (rewrite → retrieve → compress → generate → collect). After all sub-queries are processed, a merge node formats the structured output.
+
+The invariant: sub-queries never share retrieved documents or compressed context. Each runs as an independent retrieval and generation operation. This prevents context pollution where an answer for question A contains evidence retrieved for question B.
+
+Streaming and Async
+
+LangGraph's .stream() method yields state updates node by node, enabling real-time progress updates in the UI. The .astream_events() method provides fine-grained async streaming of LLM token outputs, tool invocations, and node transitions. This is essential for responsive user interfaces where users see answers being built token by token.

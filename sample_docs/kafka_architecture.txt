@@ -1,0 +1,45 @@
+Apache Kafka: Architecture and Core Concepts
+
+Apache Kafka is a distributed event streaming platform designed for high-throughput, fault-tolerant, real-time data pipelines and streaming analytics. Originally developed at LinkedIn and open-sourced in 2011, Kafka has become the de facto standard for large-scale message streaming systems.
+
+Core Abstractions
+
+A Kafka cluster consists of one or more brokers. A broker is a Kafka server that stores and serves messages. Producers publish records to topics, and consumers subscribe to topics to read those records. A topic is a logical channel — a named stream of records — and can be thought of as a category or feed name.
+
+Topics are divided into partitions. Each partition is an ordered, immutable sequence of records that is continually appended to. Records within a partition are each assigned a sequential ID called an offset. Kafka guarantees ordering only within a single partition, not across partitions of the same topic.
+
+Ordering Guarantees
+
+Kafka guarantees message ordering at the partition level. If a producer sends messages A, B, C to partition 0 of a topic, consumers of partition 0 will always read them in the order A, B, C. The offset monotonically increases per partition and can never go backwards.
+
+To guarantee strict global ordering across all messages on a topic, a producer must use exactly one partition. This is the only way to achieve total ordering, but it limits throughput. In practice, producers use partition keys to ensure that related messages (e.g., all events for a specific user ID) land on the same partition, giving per-entity ordering without sacrificing parallelism.
+
+Replication and Fault Tolerance
+
+Each partition has one leader and zero or more follower replicas. All reads and writes go to the leader. Followers replicate the leader's log asynchronously. If the leader fails, one of the in-sync replicas (ISR) is elected as the new leader. The replication factor controls how many replicas exist per partition. A replication factor of 3 means data survives the failure of any two brokers simultaneously.
+
+Consumer Groups
+
+Consumers are organized into consumer groups. Each partition is consumed by exactly one consumer within a group. This allows horizontal scaling of consumption: a topic with 12 partitions can be consumed in parallel by up to 12 consumers in the same group. If more consumers than partitions exist in a group, some consumers will be idle.
+
+Different consumer groups consume a topic independently. Kafka retains messages based on configurable retention policies (time-based or size-based), not on consumer acknowledgement. This means multiple independent systems can consume the same topic without interfering with each other.
+
+Log Compaction
+
+Beyond time-based and size-based retention, Kafka supports log compaction. In a compacted topic, Kafka guarantees that for any given message key, at least the last known value is retained. Older records with the same key are garbage-collected. This is useful for changelog topics where you need the current state of each entity.
+
+ZooKeeper and KRaft
+
+Historically, Kafka used Apache ZooKeeper for cluster metadata management, controller election, and configuration storage. Starting with Kafka 2.8, the KRaft mode (Kafka Raft) was introduced to eliminate the ZooKeeper dependency. KRaft moves metadata management into Kafka itself using a Raft-based consensus protocol, simplifying operations and improving scalability of the metadata layer.
+
+Exactly-Once Semantics
+
+Kafka supports exactly-once semantics (EOS) end-to-end for Kafka Streams applications. Producers can be configured as idempotent (enabling safe retries without duplicates) and transactional (atomically writing to multiple partitions and topics). Consumers can use transactional APIs to read-process-write in an atomic fashion. This eliminates double-counting in stateful streaming applications.
+
+Performance Characteristics
+
+Kafka achieves high throughput by writing messages sequentially to disk, leveraging the operating system's page cache, and using zero-copy data transfer (sendfile) for consumers. A single broker can typically handle hundreds of thousands of messages per second. Kafka's performance is largely I/O-bound, not CPU-bound. Consumer lag — the difference between the latest produced offset and the consumer's committed offset — is the primary operational metric to monitor.
+
+Kafka Connect and Kafka Streams
+
+Kafka Connect is a framework for building and running reusable data connectors that import/export data between Kafka and external systems (databases, file systems, cloud services). Kafka Streams is a client library for building real-time stream processing applications that consume from and produce to Kafka topics. It supports stateful operations like joins and aggregations using local RocksDB state stores.

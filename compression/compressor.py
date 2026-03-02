@@ -58,6 +58,9 @@ def compress_context(docs: List[Document], query: str) -> str:
         "that are relevant to the user's question.\n"
         "- Do NOT answer the question.\n"
         "- Do NOT explain your reasoning.\n"
+        "- Prefer to keep slightly more detail rather than over-summarizing.\n"
+        "- When the question asks for lists, failure modes, best practices, or\n"
+        "  multiple items, preserve all distinct relevant items.\n"
         "- Keep citations or doc/page references if helpful.\n"
     )
 

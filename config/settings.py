@@ -80,7 +80,10 @@ class Settings(BaseSettings):
     top_k_text: int = Field(5, alias="TOP_K_TEXT")
     top_k_image: int = Field(3, alias="TOP_K_IMAGE")
     top_k_audio: int = Field(3, alias="TOP_K_AUDIO")
-    retrieval_confidence_threshold: float = Field(0.2, alias="RETRIEVAL_CONFIDENCE_THRESHOLD")
+    # Minimum retrieval score required to treat results as confident.
+    # Interpretation depends on the vector store backend. When set to 0,
+    # confidence gating is effectively disabled.
+    retrieval_confidence_threshold: float = Field(0.0, alias="RETRIEVAL_CONFIDENCE_THRESHOLD")
 
     # ── Compression ──────────────────────────────────────────────────────────
     compression_model: str = Field("gpt-4.1-mini", alias="COMPRESSION_MODEL")
@@ -104,7 +107,15 @@ class Settings(BaseSettings):
     # ── Query decomposition ──────────────────────────────────────────────────
     max_sub_queries: int = Field(3, alias="MAX_SUB_QUERIES")
 
-    # ── HyDE / query rewriting ───────────────────────────────────────────────
+    # ── Query rewriting (multi-phrasing) ────────────────────────────────────
+    # Controls whether the original query is expanded into multiple alternative
+    # phrasings before retrieval.  Independent of HyDE.
+    enable_query_rewrite: bool = Field(True, alias="ENABLE_QUERY_REWRITE")
+
+    # ── HyDE (Hypothetical Document Embeddings) ──────────────────────────────
+    # When true, an LLM generates a hypothetical answer document whose embedding
+    # is used as a secondary retrieval vector.  The hypothetical text itself is
+    # never persisted or surfaced to the user — it is a retrieval-only technique.
     enable_hyde: bool = Field(True, alias="ENABLE_HYDE")
     hyde_model: str = Field("gpt-4.1-mini", alias="HYDE_MODEL")
     hyde_max_tokens: int = Field(300, alias="HYDE_MAX_TOKENS")

@@ -5,11 +5,21 @@ Responsibilities:
 - Read VECTOR_STORE from configuration.
 - Initialize the appropriate backend (Chroma, FAISS, Pinecone).
 - Return a common LangChain VectorStore interface.
+
+Score semantics by backend
+--------------------------
+  chroma  : similarity_search_with_score returns L2/cosine DISTANCE → lower is better.
+            Normalize to confidence via  confidence = 1 - raw_score  (clamped to [0,1]).
+  pinecone: similarity_search_with_score returns cosine SIMILARITY   → higher is better.
+            Score is already a confidence in [0,1]; use as-is.
+  faiss   : By default uses L2 distance → lower is better.
+            When FAISS_USE_INNER_PRODUCT=true, returns inner-product similarity → higher better.
+            Normalize the L2 case via  confidence = 1 / (1 + raw_score)  (always [0,1]).
 """
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 from langchain_community.vectorstores import FAISS, Chroma
 from langchain_core.vectorstores import VectorStore
@@ -17,10 +27,43 @@ from langchain_pinecone import PineconeVectorStore
 
 from config.settings import VectorStoreType, get_settings
 from embeddings.factory import get_embedder
+from utils.logger import get_logger
+
+_log = get_logger(__name__)
 
 
 def _ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
+
+
+def normalize_score(raw_score: float) -> Tuple[float, str]:
+    """
+    Convert a raw score from the current backend to a confidence in [0, 1].
+
+    Returns (confidence, description) where description briefly explains the
+    transformation so callers can log it clearly.
+    """
+    cfg = get_settings()
+
+    if cfg.vector_store == VectorStoreType.PINECONE:
+        # Pinecone cosine similarity: already in [0, 1], higher = better.
+        confidence = float(max(0.0, min(1.0, raw_score)))
+        return confidence, "pinecone_similarity(as-is)"
+
+    if cfg.vector_store == VectorStoreType.FAISS:
+        if cfg.faiss_use_inner_product:
+            # Inner-product similarity, typically in [-1, 1] for normalised vectors.
+            confidence = float(max(0.0, min(1.0, raw_score)))
+            return confidence, "faiss_ip(as-is)"
+        # L2 distance: confidence = 1 / (1 + distance) so large distances → ~0.
+        confidence = 1.0 / (1.0 + float(raw_score))
+        return confidence, f"faiss_l2→conf(1/(1+{raw_score:.4f}))"
+
+    # Chroma (default): cosine / L2 distance, lower is better.
+    # Distance is typically in [0, 2]; clamp to [0, 1] before inverting.
+    clamped = max(0.0, min(1.0, float(raw_score)))
+    confidence = 1.0 - clamped
+    return confidence, f"chroma_dist→conf(1-{raw_score:.4f})"
 
 
 def create_vectorstore(
@@ -39,6 +82,13 @@ def create_vectorstore(
     """
     cfg = get_settings()
     embeddings = get_embedder()
+
+    _log.info(
+        "create_vectorstore: backend=%s  collection=%r  (env VECTOR_STORE=%s)",
+        cfg.vector_store.value,
+        collection_name,
+        cfg.vector_store.value,
+    )
 
     if cfg.vector_store == VectorStoreType.CHROMA:
         if not collection_name:
@@ -87,4 +137,4 @@ def create_vectorstore(
     raise ValueError(f"Unsupported VECTOR_STORE backend: {cfg.vector_store}")
 
 
-__all__ = ["create_vectorstore"]
+__all__ = ["create_vectorstore", "normalize_score"]

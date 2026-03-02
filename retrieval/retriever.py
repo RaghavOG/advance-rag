@@ -17,7 +17,7 @@ from config.settings import get_settings
 from embeddings.factory import get_embedder
 from query.rewrite import generate_hyde_document, rewrite_queries
 from utils.logger import get_logger
-from vectorstores.factory import create_vectorstore
+from vectorstores.factory import create_vectorstore, normalize_score
 
 log = get_logger(__name__)
 
@@ -27,18 +27,35 @@ def _adaptive_top_k(query: str, num_rewrites: int, base_k: int) -> int:
     Heuristic adaptive top-k.
     """
     text = query.lower()
+    words = text.split()
+    num_words = len(words)
+
+    # Broad / explanatory queries should look at more context.
     long_or_explanatory = any(
-        kw in text for kw in ["explain", "overview", "why", "how", "compare", "list"]
-    ) or len(query) > 120
+        kw in text
+        for kw in [
+            "explain",
+            "overview",
+            "why",
+            "how",
+            "compare",
+            "list",
+            "failure",
+            "modes",
+            "best practices",
+        ]
+    ) or num_words >= 15
 
     if num_rewrites <= 1:
-        # Single query: small factual -> 3; otherwise base_k.
-        if not long_or_explanatory and base_k >= 3:
+        # Short, factual-style question → keep k small for precision.
+        if not long_or_explanatory and num_words <= 10 and base_k >= 3:
             return 3
+        # Broader / longer question → use configured base_k.
         return base_k
 
-    # Multiple rewrites: keep per-rewrite k modest.
-    return max(2, min(3, base_k))
+    # Multiple rewrites: keep per-rewrite k modest so total retrieved ≈ base_k.
+    per_rewrite = max(2, min(4, max(1, base_k // max(1, num_rewrites))))
+    return per_rewrite
 
 
 def retrieve_text(
@@ -69,18 +86,23 @@ def retrieve_text(
         log.debug("  [rewrite %d] %r", rewrite_id, rq[:80])
         try:
             scored = vs.similarity_search_with_score(rq, k=per_rewrite_k, filter=metadata_filter)
-            log.debug("    → %d result(s)  scores=%s", len(scored),
-                      [round(s, 4) for _, s in scored])
+            log.debug(
+                "    → %d result(s)  raw_scores=%s  backend=%s",
+                len(scored),
+                [round(float(s), 4) for _, s in scored],
+                cfg.vector_store.value,
+            )
         except Exception as exc:
             log.warning("  similarity_search_with_score failed (%s) — falling back to unscored", exc)
             docs_only = vs.similarity_search(rq, k=per_rewrite_k, filter=metadata_filter)
             scored = [(d, 0.0) for d in docs_only]
 
-        for doc, score in scored:
+        for doc, raw_score in scored:
+            confidence, _ = normalize_score(float(raw_score))
             doc.metadata = doc.metadata or {}
             if "rewrite_id" not in doc.metadata:
                 doc.metadata["rewrite_id"] = rewrite_id
-            results.append((doc, float(score)))
+            results.append((doc, confidence))
 
     log.info("  Raw results before dedup: %d", len(results))
 
@@ -111,7 +133,9 @@ def retrieve_text(
     seen: set = set()
     final_docs: List[Document] = []
 
-    for doc, score in sorted(results, key=lambda x: x[1]):
+    # Scores are now normalized confidences in [0, 1] — sort DESCENDING so the
+    # most confident docs come first.
+    for doc, score in sorted(results, key=lambda x: x[1], reverse=True):
         key = _key(doc)
         if key in seen:
             continue

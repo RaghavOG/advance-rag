@@ -28,10 +28,12 @@ def _get_client() -> OpenAI:
 def rewrite_queries(query: str) -> List[str]:
     """
     Generate 2–4 alternative phrasings of the same question to improve retrieval.
+
+    Controlled by ENABLE_QUERY_REWRITE (independent of ENABLE_HYDE).
     """
     cfg = get_settings()
-    if not cfg.enable_hyde:
-        log.debug("HyDE/rewriting disabled — returning original query only")
+    if not cfg.enable_query_rewrite:
+        log.debug("Query rewriting disabled (ENABLE_QUERY_REWRITE=false) — returning original only")
         return [query]
 
     log.info("Query rewriting: model=%s  query=%r", cfg.hyde_model, query[:80])
@@ -80,6 +82,12 @@ def rewrite_queries(query: str) -> List[str]:
 def generate_hyde_document(query: str) -> str:
     """
     Generate a hypothetical reference-style document for HyDE retrieval.
+
+    The generated text is a RETRIEVAL-ONLY artifact: it is embedded to create
+    a richer semantic vector, then immediately discarded.  It is never returned
+    to the user or persisted anywhere.
+
+    Controlled by ENABLE_HYDE (independent of ENABLE_QUERY_REWRITE).
     """
     cfg = get_settings()
     if not cfg.enable_hyde:

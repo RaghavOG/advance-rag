@@ -68,11 +68,10 @@ from graph.nodes import (
     merge_retrieval_results,
     normalize_user_prompt,
     query_rewrite_expand,
-    retrieve_documents,
     retrieval_failure_node,
+    retrieve_documents,
 )
 from graph.state import RAGState
-
 
 # ── Conditional routing functions ────────────────────────────────────────────
 
@@ -110,9 +109,26 @@ def _route_retrieval(state: Dict[str, Any]) -> str:
 
     cfg = get_settings()
     threshold = cfg.retrieval_confidence_threshold
-    best_score = min((d.get("score", 1.0) for d in docs), default=1.0)
-    # Lower score = better match (distance-based). Values near 0 are good.
-    if best_score > threshold and threshold > 0:
+    # Scores are normalized confidences in [0, 1] — higher is BETTER.
+    # best_confidence is the highest confidence among the retrieved docs.
+    best_confidence = max((d.get("score", 0.0) for d in docs), default=0.0)
+
+    from utils.logger import get_logger  # local import to avoid cycles
+    log = get_logger(__name__)
+    log.info(
+        "  Retrieval confidence check: best_confidence=%.4f  threshold=%.4f"
+        "  (%s)",
+        best_confidence,
+        threshold,
+        "PASS" if threshold == 0 or best_confidence >= threshold else "FAIL",
+    )
+
+    if threshold > 0 and best_confidence < threshold:
+        log.info(
+            "  Best confidence %.4f < threshold %.4f → treating as retrieval failure",
+            best_confidence,
+            threshold,
+        )
         return "retrieval_failure_node"
 
     return "compress_context_node"

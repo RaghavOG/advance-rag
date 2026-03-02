@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from langchain_core.documents import Document
@@ -25,13 +26,13 @@ from openai import OpenAI
 
 from compression.compressor import compress_context
 from config.settings import get_settings
+from embeddings.factory import get_embedder
 from generation.answer import generate_answer
 from query.decompose import split_queries
 from query.rewrite import generate_hyde_document, rewrite_queries
 from retrieval.retriever import _adaptive_top_k
-from vectorstores.factory import create_vectorstore
-from embeddings.factory import get_embedder
 from utils.logger import get_logger
+from vectorstores.factory import create_vectorstore, normalize_score
 
 log = get_logger(__name__)
 
@@ -104,6 +105,10 @@ def ambiguity_check(state: Dict[str, Any]) -> Dict[str, Any]:
     query = state.get("current_query", "")
     log.info("◉ NODE  ambiguity_check  query=%r", query[:80])
     cfg = get_settings()
+    if not cfg.enable_clarification:
+        log.info("  Ambiguity detection disabled by config — treating as unambiguous")
+        return {"is_ambiguous": False, "clarification_question": None}
+
     client = _openai(timeout=cfg.ambiguity_timeout)
 
     system = (
@@ -113,6 +118,7 @@ def ambiguity_check(state: Dict[str, Any]) -> Dict[str, Any]:
         "Reply ONLY with valid JSON, no extra text:\n"
         '{"is_ambiguous": true|false, "clarification_question": "<string or null>"}'
     )
+    t0 = time.perf_counter()
     resp = client.chat.completions.create(
         model=cfg.ambiguity_model,
         messages=[{"role": "system", "content": system},
@@ -120,6 +126,8 @@ def ambiguity_check(state: Dict[str, Any]) -> Dict[str, Any]:
         temperature=0,
         max_tokens=120,
     )
+    log.info("  ambiguity_check LLM call: %.3fs", time.perf_counter() - t0)
+
     content = resp.choices[0].message.content or "{}"
     if "```" in content:
         content = content.split("```")[1].replace("json", "").strip()
@@ -175,42 +183,95 @@ def retrieve_documents(state: Dict[str, Any]) -> Dict[str, Any]:
     log.info("◉ NODE  retrieve_documents  rewrites=%d", len(rewrites))
     top_k = state.get("top_k_text") or get_settings().top_k_text
     cfg = get_settings()
+
+    # Always use the configured backend — passing collection_name for Chroma;
+    # Pinecone and FAISS ignore it.  The factory logs the actual backend selected.
     vs = create_vectorstore(collection_name=cfg.chroma_collection_text)
 
+    t_retrieve_start = time.perf_counter()
     results: List[Dict[str, Any]] = []
     for rewrite_id, rq in enumerate(rewrites):
+        t_rw = time.perf_counter()
         try:
             scored = vs.similarity_search_with_score(rq, k=top_k)
-        except Exception:
+            log.debug(
+                "  [rewrite %d] %d result(s)  raw_scores=%s  backend=%s  elapsed=%.3fs",
+                rewrite_id,
+                len(scored),
+                [round(float(s), 4) for _, s in scored],
+                cfg.vector_store.value,
+                time.perf_counter() - t_rw,
+            )
+        except Exception as exc:
+            log.warning(
+                "  similarity_search_with_score failed for rewrite %d (%s) — "
+                "falling back to unscored search",
+                rewrite_id,
+                exc,
+            )
             raw_docs = vs.similarity_search(rq, k=top_k)
             scored = [(d, 0.0) for d in raw_docs]
 
-        for doc, score in scored:
+        for doc, raw_score in scored:
+            confidence, norm_desc = normalize_score(float(raw_score))
+            log.debug(
+                "    raw_score=%.4f  confidence=%.4f  (%s)",
+                raw_score,
+                confidence,
+                norm_desc,
+            )
             doc.metadata = doc.metadata or {}
             doc.metadata.setdefault("rewrite_id", rewrite_id)
-            results.append(_doc_to_dict(doc, float(score)))
+            # Store the normalized confidence — all downstream logic uses this.
+            results.append(_doc_to_dict(doc, confidence))
 
-    # HyDE pass
+    # ── HyDE pass ────────────────────────────────────────────────────────────
+    # HyDE (Hypothetical Document Embeddings) is a RETRIEVAL-ONLY technique:
+    #   1. Ask the LLM to write a hypothetical doc that would answer the query.
+    #   2. Embed that text to get a richer semantic vector.
+    #   3. Use that vector to search the real index.
+    #   4. The hypothetical text is immediately discarded; only the retrieved
+    #      real documents are kept.
+    # Docs retrieved via HyDE do not have a raw similarity score because
+    # similarity_search_by_vector does not return one.  We assign a mid-level
+    # fallback confidence (0.5) so they participate in the merge and gating
+    # rather than being silently zeroed out.
+    hyde_fallback_confidence = 0.5
+
     query = state.get("clarified_query") or state.get("current_query", "")
+    t_hyde = time.perf_counter()
     hyde_text = generate_hyde_document(query)
     if hyde_text:
+        log.debug("  HyDE doc generated in %.3fs  (%d chars)", time.perf_counter() - t_hyde, len(hyde_text))
         try:
+            t_hyde_search = time.perf_counter()
             embedder = get_embedder()
             vec = embedder.embed_query(hyde_text)
             hyde_docs = vs.similarity_search_by_vector(vec, k=top_k)
+            log.debug(
+                "  HyDE vector search: %d doc(s) retrieved  elapsed=%.3fs"
+                "  (confidence assigned: %.2f — unscored fallback)",
+                len(hyde_docs),
+                time.perf_counter() - t_hyde_search,
+                hyde_fallback_confidence,
+            )
             for doc in hyde_docs:
                 doc.metadata = doc.metadata or {}
                 doc.metadata["hyde"] = True
-                results.append(_doc_to_dict(doc, 0.0))
-        except Exception:
-            pass
+                results.append(_doc_to_dict(doc, hyde_fallback_confidence))
+        except Exception as exc:
+            log.warning("  HyDE vector search failed (%s) — skipped", exc)
 
-    log.info("  Total raw results (pre-merge): %d", len(results))
+    log.info(
+        "  Total raw results (pre-merge): %d  retrieve_elapsed=%.3fs",
+        len(results),
+        time.perf_counter() - t_retrieve_start,
+    )
     return {"retrieved_docs_with_scores": results}
 
 
 def merge_retrieval_results(state: Dict[str, Any]) -> Dict[str, Any]:
-    """Node 8 — deduplicate chunks, normalize scores, select final doc set."""
+    """Node 8 — deduplicate chunks and select top-k by normalized confidence."""
     log.info("◉ NODE  merge_retrieval_results")
     raw = state.get("retrieved_docs_with_scores") or []
     top_k = state.get("top_k_text") or get_settings().top_k_text
@@ -219,8 +280,9 @@ def merge_retrieval_results(state: Dict[str, Any]) -> Dict[str, Any]:
         m = d.get("metadata", {})
         return (m.get("doc_id") or m.get("source"), m.get("chunk_id"))
 
-    # Sort ascending by score (lower = more similar for distance-based stores).
-    sorted_raw = sorted(raw, key=lambda x: x.get("score", 0.0))
+    # Scores are normalized confidences in [0, 1] — sort DESCENDING so the
+    # most confident (highest confidence) docs come first.
+    sorted_raw = sorted(raw, key=lambda x: x.get("score", 0.0), reverse=True)
     seen: set = set()
     final: List[Dict[str, Any]] = []
     for d in sorted_raw:
@@ -232,7 +294,13 @@ def merge_retrieval_results(state: Dict[str, Any]) -> Dict[str, Any]:
         if len(final) >= top_k:
             break
 
-    log.info("  After dedup/merge: %d docs  (from %d raw)", len(final), len(raw))
+    confidence_values = [round(d.get("score", 0.0), 4) for d in final]
+    log.info(
+        "  After dedup/merge: %d docs  (from %d raw)  confidences=%s",
+        len(final),
+        len(raw),
+        confidence_values,
+    )
     return {"final_retrieved_docs": final}
 
 
@@ -240,9 +308,14 @@ def merge_retrieval_results(state: Dict[str, Any]) -> Dict[str, Any]:
 
 def retrieval_failure_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """Node 9 — surfaced when no docs were retrieved or confidence is too low."""
-    log.warning("◉ NODE  retrieval_failure_node  query=%r", state.get("current_query", "")[:60])
+    query = state.get("current_query", "")[:60]
+    log.warning("◉ NODE  retrieval_failure_node  query=%r", query)
+    message = "I couldn't find relevant information in the documents."
     return {
-        "final_answer": "I couldn't find relevant information in the documents.",
+        # Treat this like a completed per-query answer so the multi-query
+        # loop can advance instead of spinning forever on the same question.
+        "answer_text": message,
+        "final_answer": message,
         "error_message": "retrieval_failure",
     }
 
@@ -253,6 +326,7 @@ def compress_context_node(state: Dict[str, Any]) -> Dict[str, Any]:
     docs_raw = state.get("final_retrieved_docs") or []
     docs = [_dict_to_doc(d) for d in docs_raw]
     query = state.get("clarified_query") or state.get("current_query", "")
+    t0 = time.perf_counter()
     try:
         compressed = compress_context(docs, query)
     except Exception as exc:
@@ -260,6 +334,7 @@ def compress_context_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "compressed_context": "",
             "error_message": f"compression_error:{exc}",
         }
+    log.info("  compress_context elapsed=%.3fs", time.perf_counter() - t0)
     return {"compressed_context": compressed}
 
 
@@ -288,12 +363,14 @@ def generate_answer_node(state: Dict[str, Any]) -> Dict[str, Any]:
     retries = state.get("generation_retries", 0)
     cfg = get_settings()
 
+    t0 = time.perf_counter()
     try:
         answer = generate_answer(compressed, query)
+        log.info("  generate_answer elapsed=%.3fs", time.perf_counter() - t0)
         return {"answer_text": answer, "generation_retries": retries}
     except Exception as exc:
+        log.info("  generate_answer failed after %.3fs", time.perf_counter() - t0)
         if retries < cfg.graph_max_retries:
-            # Signal a retry; the graph edge will route back here.
             return {
                 "answer_text": "",
                 "generation_retries": retries + 1,

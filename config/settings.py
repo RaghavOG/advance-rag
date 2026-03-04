@@ -116,14 +116,46 @@ class Settings(BaseSettings):
     # When true, an LLM generates a hypothetical answer document whose embedding
     # is used as a secondary retrieval vector.  The hypothetical text itself is
     # never persisted or surfaced to the user — it is a retrieval-only technique.
+    # HyDE is confidence-gated: it only activates when first-pass retrieval
+    # best_confidence < hyde_confidence_threshold.  Set to 1.0 to always trigger,
+    # 0.0 to effectively disable even when ENABLE_HYDE=true.
     enable_hyde: bool = Field(True, alias="ENABLE_HYDE")
     hyde_model: str = Field("gpt-4.1-mini", alias="HYDE_MODEL")
     hyde_max_tokens: int = Field(300, alias="HYDE_MAX_TOKENS")
     hyde_timeout: int = Field(20, alias="HYDE_TIMEOUT")
+    hyde_confidence_threshold: float = Field(0.5, alias="HYDE_CONFIDENCE_THRESHOLD")
+
+    # ── Faithfulness check ────────────────────────────────────────────────────
+    # When true, generated answers are verified against retrieved context via an
+    # LLM call.  Unsupported claims are logged and a warning prefix is prepended
+    # to the answer.  Adds one LLM round-trip per query.
+    enable_faithfulness_check: bool = Field(False, alias="ENABLE_FAITHFULNESS_CHECK")
+    faithfulness_check_model: str = Field("gpt-4.1-mini", alias="FAITHFULNESS_CHECK_MODEL")
 
     # ── Ambiguity / clarification ────────────────────────────────────────────
     ambiguity_model: str = Field("gpt-4.1-mini", alias="AMBIGUITY_MODEL")
     ambiguity_timeout: int = Field(15, alias="AMBIGUITY_TIMEOUT")
+
+    # ── Safety filter ────────────────────────────────────────────────────────
+    # Fast rule-based filter (no LLM) that blocks prompt-injection attempts and
+    # excessively long inputs before any expensive processing begins.
+    enable_safety_filter: bool = Field(True, alias="ENABLE_SAFETY_FILTER")
+    safety_max_input_chars: int = Field(4000, alias="SAFETY_MAX_INPUT_CHARS")
+
+    # ── Reranker ─────────────────────────────────────────────────────────────
+    # When true, an LLM re-scores the merged candidate docs against the query
+    # and re-orders them before the confidence gate.  Disabled by default to
+    # avoid extra LLM cost; enable when retrieval precision matters most.
+    enable_reranker: bool = Field(False, alias="ENABLE_RERANKER")
+    reranker_model: str = Field("gpt-4.1-mini", alias="RERANKER_MODEL")
+    reranker_top_n: int = Field(3, alias="RERANKER_TOP_N")
+
+    # ── Parallel multi-query ─────────────────────────────────────────────────
+    # When true and a prompt contains multiple independent questions, each
+    # sub-query is answered concurrently using a thread pool.
+    # Rate-limited by parallel_max_workers.
+    enable_parallel_multi_query: bool = Field(False, alias="ENABLE_PARALLEL_MULTI_QUERY")
+    parallel_max_workers: int = Field(3, alias="PARALLEL_MAX_WORKERS")
 
     # ── Graph / pipeline ─────────────────────────────────────────────────────
     graph_max_retries: int = Field(2, alias="GRAPH_MAX_RETRIES")

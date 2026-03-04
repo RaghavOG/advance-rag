@@ -18,18 +18,20 @@ interface FlowEdge {
 
 const layers: { title: string; color: string; nodes: FlowNode[]; edge?: FlowEdge }[] = [
   {
-    title: "Layer 0 — Entry",
+    title: "Layer 0 — Entry & Safety",
     color: "border-slate-600",
     nodes: [
       { id: "normalize", label: "normalize_user_prompt", sublabel: "trim · normalize", kind: "tool" },
+      { id: "safety", label: "safety_filter_node", sublabel: "rule-based injection guard", kind: "tool" },
     ],
     edge: {},
   },
   {
-    title: "Layer 1 — Multi-Query",
+    title: "Layer 1 — Multi-Query Routing",
     color: "border-indigo-500",
     nodes: [
       { id: "detect", label: "detect_multi_query", sublabel: "split on ? · numbered lists", kind: "decision" },
+      { id: "parallel", label: "parallel_multi_query_node", sublabel: "optional thread-pool fan-out", kind: "tool" },
     ],
     edge: { label: "single query or loop per sub-query" },
   },
@@ -40,9 +42,12 @@ const layers: { title: string; color: string; nodes: FlowNode[]; edge?: FlowEdge
       { id: "ambiguity", label: "ambiguity_check", sublabel: "LLM (cheap)", kind: "llm" },
       { id: "clarify", label: "clarification_node", sublabel: "→ EXIT (single turn)", kind: "input" },
       { id: "rewrite", label: "query_rewrite_expand", sublabel: "2–4 retrieval rewrites", kind: "llm" },
-      { id: "topk", label: "adaptive_top_k_decision", sublabel: "heuristic", kind: "tool" },
-      { id: "retrieve", label: "retrieve_documents", sublabel: "vector + HyDE", kind: "tool" },
+      { id: "topk", label: "adaptive_top_k_decision", sublabel: "heuristic top-k", kind: "tool" },
+      { id: "retrieve", label: "retrieve_documents", sublabel: "vector search (first pass)", kind: "tool" },
+      { id: "normalise", label: "score_normalizer_node", sublabel: "distance → confidence [0,1]", kind: "tool" },
       { id: "merge", label: "merge_retrieval_results", sublabel: "dedup · score sort", kind: "tool" },
+      { id: "hyde", label: "hyde_augmentation_node", sublabel: "confidence-gated HyDE", kind: "llm" },
+      { id: "rerank", label: "reranker_node", sublabel: "LLM reranker (optional)", kind: "llm" },
     ],
     edge: {},
   },
@@ -51,9 +56,10 @@ const layers: { title: string; color: string; nodes: FlowNode[]; edge?: FlowEdge
     color: "border-rose-500",
     nodes: [
       { id: "ret_fail", label: "retrieval_failure_node", sublabel: "no docs / low confidence", kind: "failure" },
-      { id: "compress", label: "compress_context_node", sublabel: "LLM summarize", kind: "llm" },
+      { id: "compress", label: "compress_context_node", sublabel: "LLM summarize + expansion guard", kind: "llm" },
       { id: "comp_fail", label: "compression_failure_node", sublabel: "extractive fallback", kind: "failure" },
       { id: "generate", label: "generate_answer_node", sublabel: "grounded · cited", kind: "llm" },
+      { id: "faithful", label: "faithfulness_check_node", sublabel: "post-answer grounding", kind: "llm" },
       { id: "llm_fail", label: "llm_timeout_failure_node", sublabel: "retry exhausted", kind: "failure" },
     ],
     edge: {},
@@ -91,7 +97,7 @@ export function PipelineFlow() {
           LangGraph Pipeline
         </h2>
         <p className="text-slate-400 text-center mb-12 max-w-xl mx-auto">
-          15 nodes organized across 4 layers. Failures are nodes — not exceptions.
+          20+ nodes organized across 4 layers. Failures are nodes — not exceptions.
           Every routing decision is explicit.
         </p>
       </motion.div>

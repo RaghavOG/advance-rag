@@ -22,7 +22,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from backend.routes.ingestion_admin import router as ingestion_admin_router
 from backend.routes.query import router as query_router
+from backend.routes.upload import router as upload_router
 from utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -101,6 +103,8 @@ app.add_middleware(
 )
 
 app.include_router(query_router, prefix="/api")
+app.include_router(ingestion_admin_router, prefix="/api")
+app.include_router(upload_router, prefix="/api")
 
 
 # ── Health check helpers ──────────────────────────────────────────────────────

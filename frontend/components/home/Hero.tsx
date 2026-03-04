@@ -79,9 +79,9 @@ export function Hero() {
         transition={{ delay: 0.3, duration: 0.4, ease: "easeOut" }}
       >
         {[
-          { value: "15", label: "Graph Nodes" },
-          { value: "4", label: "Failure Nodes" },
-          { value: "HyDE", label: "Query Strategy" },
+          { value: "20+", label: "Graph Nodes" },
+          { value: "6", label: "Failure / Safety Nodes" },
+          { value: "HyDE + Reranker", label: "Retrieval Strategy" },
           { value: "100%", label: "Local Deployment" },
         ].map(({ value, label }) => (
           <div key={label} className="bg-surface-card px-6 py-5 text-center">

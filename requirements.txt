@@ -48,7 +48,7 @@ faiss-cpu>=1.8.0
 # ===============================
 # Managed Vector Store (Optional)
 # ===============================
-pinecone[asyncio]>=6.0.0,<8.0.0
+pinecone[asyncio]>=8.1.2,<9.0.0
 langchain-pinecone>=0.2.0
 
 # ===============================
